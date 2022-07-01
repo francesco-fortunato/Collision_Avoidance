@@ -5,4 +5,4 @@ PROJECT_CATKIN_DEPENDS = "".replace(';', ' ')
 PKG_CONFIG_LIBRARIES_WITH_PREFIX = "".split(';') if "" != "" else []
 PROJECT_NAME = "collision_avoidance"
 PROJECT_SPACE_DIR = "/home/francesco/catkin_ws/src/lab-IAGI-project/devel/.private/collision_avoidance"
-PROJECT_VERSION = "0.0.0"
+PROJECT_VERSION = "1.0.0"

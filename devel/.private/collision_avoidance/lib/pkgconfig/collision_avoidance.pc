@@ -2,7 +2,7 @@ prefix=/home/francesco/catkin_ws/src/lab-IAGI-project/devel/.private/collision_a
 
 Name: collision_avoidance
 Description: Description of collision_avoidance
-Version: 0.0.0
+Version: 1.0.0
 Cflags: 
 Libs: -L${prefix}/lib 
 Requires: 

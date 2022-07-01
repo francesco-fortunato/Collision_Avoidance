@@ -8,7 +8,12 @@ project(collision_avoidance)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  geometry_msgs
+  nav_msgs
   roscpp
+  sensor_msgs
+  std_msgs
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
@@ -51,6 +56,7 @@ find_package(catkin REQUIRED COMPONENTS
 #   Message2.msg
 # )
 
+
 ## Generate services in the 'srv' folder
 # add_service_files(
 #   FILES
@@ -70,6 +76,14 @@ find_package(catkin REQUIRED COMPONENTS
 #   DEPENDENCIES
 #   std_msgs  # Or other packages containing msgs
 # )
+
+# generate_messages(
+	#DEPENDENCIES
+	#geometry_msgs
+	#nav_msgs 
+	#sensor_msgs
+	#std_msgs
+#)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -103,8 +117,9 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES collision_avoidance
-#  CATKIN_DEPENDS roscpp
+#  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy sensor_msgs std_msgs 
 #  DEPENDS system_lib
+#  CATKIN_DEPENDS message_runtime
 )
 
 ###########
@@ -114,7 +129,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+#include
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -202,3 +217,6 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+add_executable(controller src/controller.cpp)
+target_link_libraries(controller ${catkin_LIBRARIES})

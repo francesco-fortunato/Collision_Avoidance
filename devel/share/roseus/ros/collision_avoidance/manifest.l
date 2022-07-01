@@ -1,0 +1,1 @@
+/home/francesco/catkin_ws/src/lab-IAGI-project/devel/.private/collision_avoidance/share/roseus/ros/collision_avoidance/manifest.l
