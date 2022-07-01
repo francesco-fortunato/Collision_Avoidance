@@ -1,0 +1,1 @@
+/home/francesco/catkin_ws/src/lab-IAGI-project/devel/.private/catkin_tools_prebuild/local_setup.bash

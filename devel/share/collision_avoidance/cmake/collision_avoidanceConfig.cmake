@@ -1,0 +1,1 @@
+/home/francesco/catkin_ws/src/lab-IAGI-project/devel/.private/collision_avoidance/share/collision_avoidance/cmake/collision_avoidanceConfig.cmake

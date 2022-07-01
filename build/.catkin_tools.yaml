@@ -1,0 +1,6 @@
+devel_space: /home/francesco/catkin_ws/src/lab-IAGI-project/devel
+install: false
+install_space: /home/francesco/catkin_ws/src/lab-IAGI-project/install
+profile: default
+source_space: /home/francesco/catkin_ws/src/lab-IAGI-project/src
+workspace: /home/francesco/catkin_ws/src/lab-IAGI-project
