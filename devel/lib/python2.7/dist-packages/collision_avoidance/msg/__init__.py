@@ -1,1 +1,0 @@
-/home/francesco/catkin_ws/src/lab-IAGI-project/devel/.private/collision_avoidance/lib/python2.7/dist-packages/collision_avoidance/msg/__init__.py

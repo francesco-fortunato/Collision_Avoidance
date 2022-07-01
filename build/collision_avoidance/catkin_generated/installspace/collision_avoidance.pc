@@ -1,8 +1,0 @@
-prefix=/home/francesco/catkin_ws/src/lab-IAGI-project/install
-
-Name: collision_avoidance
-Description: Description of collision_avoidance
-Version: 1.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 
