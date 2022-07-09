@@ -6,9 +6,10 @@
 #include <cmath>
 #include "std_msgs/String.h"
 
-#define PARAM_VISUALE 380      // Parametro che definisce il range dei valori da togliere sia da sinistra che da destra per mantenere solo i valori centrali
-#define WARNING_FRONT_PARAM 1.5  // Definisce il confine tra lo stato di WARNING e di DANGER
-#define WARNING_SIDE_PARAM 0.3
+#define PARAM_FRONTE 500        
+#define PARAM_VISUALE 400       
+#define WARNING_CENTER_PARAM 1.0  // Distanza di sicurezza
+#define WARNING_FRONT_PARAM 0.3
 #define K_OSTACOLI 0.000001  // 10^(-6)
 #define K_VELOCITA_IMPOSTA 10000 // 10^(4)
 
@@ -28,6 +29,8 @@ sensor_msgs::LaserScan laser;
 nav_msgs::Odometry odom;
 geometry_msgs::Twist vel_joystick;
 geometry_msgs::Twist vel_stageros;
+
+float val;
 
 //Funzione ausiliaria che calcola il minimo su un array e ritorna quel valore. 
 //Usato per capire se l'ostacolo proviene da sinistra o da destra
@@ -72,12 +75,10 @@ int main(int argc , char* argv [])
 	ros::init(argc,argv,"Collision_avoidance"); //Init del nodo nell'ambiente roscore
 	ros::NodeHandle n; //NodeHandle is the main access point to communications with the ROS system
 		
-	/*       #####      Publisher     #####          */
 	ros::Publisher vel_pub;											//Publisher per il cmd_vel
 	vel_pub = n.advertise<geometry_msgs::Twist>("/cmd_vel", 1);	//Tell the master that we are going to publishing a message of type
                                                                 //Twist on the topic cmd_vel (only 1 message in queue)
 	
-	/*       #####     Subscriber     #####			  */
 	ros::Subscriber scanner_sub = n.subscribe("/base_scan", 1000, callback_scan); //Subscribe to the chatter topic /base_scan
                                                                                   //callback_scan() called anytime a new message arrives 
 
@@ -96,6 +97,7 @@ int main(int argc , char* argv [])
 		
 		int len= laser.ranges.size();				 // misura la lunghezza dell'array che mantiene tutti i valori del laser (1081)
 		int lunghezza_centro=len - 2*PARAM_VISUALE;  // misura la lunghezza dell'array che mantiene solo i valori centrali del laser
+		int lunghezza_fronte=len - 2*PARAM_FRONTE;  // misura la lunghezza dell'array che mantiene solo i valori centrali del laser
 		if (len > 0){
 			/*
 			 * In questa prima parte del codice viene creato un array di float:
@@ -103,13 +105,16 @@ int main(int argc , char* argv [])
 			 * Questo viene utilizzato per capire se ci sono ostacoli davanti al Robot
 			 * */
 			
-			float centro[lunghezza_centro];
+			float centro[lunghezza_centro], fronte[lunghezza_fronte];
 			
 			//Questo ciclo fa l'assegnazione corretta dei valori che il laser rileva
 			for(int i = 0; i < len; i++){
 				// Assegnazione dei valori centrali dei soli valori corretti
-				if(i >= PARAM_VISUALE ||  i < len-PARAM_VISUALE){
+				if(i >= PARAM_VISUALE &&  i < len-PARAM_VISUALE){
 					centro[i - PARAM_VISUALE]=laser.ranges[i];
+				}
+				if(i >= PARAM_FRONTE &&  i < len-PARAM_FRONTE)				{
+					fronte[i - PARAM_FRONTE]=laser.ranges[i];
 				}
 			}
 
@@ -131,7 +136,7 @@ int main(int argc , char* argv [])
 
 			printf("Velocita lineare:%f   e angolare:%f\n",vel_joystick.linear.x,vel_joystick.angular.z);
 
-			float incremento_radian = 270 / (len * 57.3) ;		// differenza in radianti delle misure adiacenti del laser
+			float incremento_radian = 270 / (len * 56.5) ;		// differenza in radianti delle misure adiacenti del laser
 			float angolo_estremo_destro = angolo_base_mobile - incremento_radian*lunghezza_centro/2; // valore dell'angolo per la misura più a destra del vettore centro
 			//printf("Incremento(radian): %f   ;  angolo_base_mobile:%f   ;  angolo_est_destro:%f\n",incremento_radian,angolo_base_mobile,angolo_estremo_destro);
 			
@@ -141,8 +146,8 @@ int main(int argc , char* argv [])
 			//Ciclo che calcola le componenti x e y della forza repulsiva che ogni ostacolo crea			
 			for(int i=0;i<lunghezza_centro;i++){
 				//printf("Componente x:%f ;  Componente y:%f \n",f_rep->x_comp,f_rep->y_comp);
-				if( centro[i] < WARNING_FRONT_PARAM ){
-					float valore_secondo_distanza = WARNING_FRONT_PARAM - centro[i];
+				if( centro[i] < WARNING_CENTER_PARAM ){
+					float valore_secondo_distanza = WARNING_CENTER_PARAM - centro[i];
 					valore_secondo_distanza = pow(valore_secondo_distanza,5);
 					f_rep->x_comp += K_OSTACOLI * (- valore_secondo_distanza * cos(angolo_estremo_destro + i*incremento_radian) );
 					f_rep->y_comp += K_OSTACOLI * (- valore_secondo_distanza * sin(angolo_estremo_destro + i*incremento_radian) );
@@ -172,13 +177,7 @@ int main(int argc , char* argv [])
 			f_att->y_comp = vel_joystick.linear.x * sin(angolo_base_mobile);			
 		
 			// Angolo imposto dalla velocità
-			/*float angolo_att=0;
-			if(f_att->x_comp != 0 || f_att->y_comp != 0 )
-			{
-				 angolo_att = atan(f_att->y_comp/f_att->x_comp);
-				 if(angolo_base_mobile > M_PI/2 ) angolo_att += M_PI;
-				 if(angolo_base_mobile < - M_PI/2 ) angolo_att -= M_PI;
-			}*/
+			
 			
 			//Angolo giusto
 			float angolo_giusto=angolo_base_mobile;
@@ -204,19 +203,26 @@ int main(int argc , char* argv [])
 			float v_a_imposta = 0;	//La velocita angolare che viene aggiunta a quella del joystick 
 									//per redirezionare la base mobile secondo il verso giusto
 			//Altrimenti:
-			if(vel_joystick.linear.x != 0) v_a_imposta = K_VELOCITA_IMPOSTA * fmodf(angolo_giusto - angolo_base_mobile  , M_PI);
+			if(vel_joystick.linear.x > 0) v_a_imposta = K_VELOCITA_IMPOSTA * fmodf(angolo_giusto - angolo_base_mobile  , M_PI);
 			printf("Velocita imposta :%f\n",v_a_imposta);
 			printf("\n");
 			vel_stageros.angular.z = vel_joystick.angular.z + v_a_imposta;  //Velocità angolare da mandare al nodo /stageros
 			
 			float k_l_imposta =1;	// coefficiente che moltiplica la velocità lineare della base mobile ed e' 
 									// tanto piccolo quanto più è corta la distanza dagli ostacoli
-			float valore_min = min_array(centro,lunghezza_centro);	// Uso della funzione aux per calcolare la distanza minima rilevata
-			if( valore_min < 0.3 ){
-				k_l_imposta = 0;							// Evita che la base mobile viene sbattuta verso il muro quando viene trovato in trapola
-			}
-			else if( valore_min <  WARNING_FRONT_PARAM ){  
-				k_l_imposta = valore_min / WARNING_FRONT_PARAM;     // Piu vicino l'ostacolo minore il coefficiente
+
+			float valore_min_fronte = min_array(fronte,lunghezza_fronte);	// Uso della funzione aux per calcolare la distanza minima rilevata
+			if( valore_min_fronte < WARNING_FRONT_PARAM ){			//Se davanti al robot si trova un ostacolo e non ha via di uscita 
+				k_l_imposta = 0;				// Evita che la base mobile sbatta contro l'ostacolo se non ha spazio ai lati
+				if (vel_joystick.linear.x>0.0){
+					vel_stageros.linear.x=0.0;
+					vel_stageros.angular.z+=2*M_PI; //DA IMPLEMENTARE
+				}
+			}			
+			printf("valore k_l_imposta:%f\n",k_l_imposta);
+			float valore_min_centro = min_array(centro,lunghezza_centro);
+			if( valore_min_centro <  WARNING_CENTER_PARAM ){
+				if(valore_min_fronte > WARNING_FRONT_PARAM ) k_l_imposta = valore_min_centro / (WARNING_CENTER_PARAM);     // Piu vicino è l'ostacolo, minore il coefficiente
 			}
 			
 			k_l_imposta = pow(k_l_imposta,2);
@@ -224,62 +230,21 @@ int main(int argc , char* argv [])
 			if(vel_joystick.linear.x > 0.0 ){
 				vel_stageros.linear.x = 2 * k_l_imposta * vel_joystick.linear.x;   // La velocità lineare da mandare al nodo /stageros
 			}
-			else{ 
-				vel_stageros.linear.x = vel_joystick.linear.x;	// Il coefficiente non influisce se andiamo indietro
+			else{
+				vel_stageros.linear.x=vel_joystick.linear.x;
 			}
 			
-			/*
-			 * Terza e ultima parte del codice dove si fa la publicazione della velocita verso il nodo /stageros
-			 * */
+			
+			/* Terza e ultima parte del codice dove si fa la publicazione della velocita verso il nodo /stageros
+			 */
 			
 			vel_pub.publish(vel_stageros);
-			
-						
-			
-			 
-			/*if(min_array(centro,len - 2*PARAM_VISUALE) >= SAFE_ZONE_PARAM)
-			{
-				vel_stageros.linear.x = vel_joystick.linear.x;
-				if( !ostacolo_evitato_dopo_commando ) vel_stageros.angular.z=vel_joystick.angular.z;
-				else vel_stageros.angular.z = 0.0;
-				decisione_da_prendere = true;
-				
-				printf("Navigando con velocita lineare letto dal joystick \n");
-			}*/
-				
-			/*else if(min_array(centro,len - 2*PARAM_VISUALE) > WARNING_ZONE_PARAM  &&  min_array(centro,len - 2*PARAM_VISUALE) < SAFE_ZONE_PARAM )
-			{
-				vel_stageros.linear.x = 0.2;
-				if( !ostacolo_evitato_dopo_commando ) vel_stageros.angular.z=vel_joystick.angular.z;
-				else vel_stageros.angular.z = 0.0;
-				decisione_da_prendere = true;
-				printf("Modificato la velocita lineare a 0.2 \n");
-			}*/
-			/*else
-			{
-				if(decisione_da_prendere == true){
-					if(min_array(destra,len/2) > min_array(sinistra,len - len/2)) vel_stageros.angular.z=-vel_joystick.angular.z;
-					else vel_stageros.angular.z=vel_joystick.angular.z;
-					decisione_da_prendere = false;
-				}
-				if(vel_stageros.angular.z > 0) printf("Girando a sinistra\n");
-				else printf("Girando a destra\n");
-				vel_stageros.linear.x=0.0;
-				ostacolo_evitato_dopo_commando = true;
-			}*/
-			
-			/*
-			 * Terza e ultima parte del codice dove si fa la publicazione della velocita verso il nodo /stageros
-			 * */
-			 
-			//vel_pub.publish(vel_stageros);
+
 		}
-		
-			
-		
-		
+
 	    ros::spinOnce();
 	    r.sleep();
+
 	}
 	
 	return 0;
