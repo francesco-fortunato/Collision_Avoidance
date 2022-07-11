@@ -8,10 +8,16 @@
 
 #define PARAM_FRONTE 475        
 #define PARAM_VISUALE 400       
-#define WARNING_CENTER_PARAM 1.2  // Distanza di sicurezza
+#define WARNING_CENTER_PARAM 1.5  // Distanza di sicurezza
 #define WARNING_FRONT_PARAM 0.35
 #define K_OSTACOLI 0.000001  // 10^(-6)
 #define K_VELOCITA_IMPOSTA 10000 // 10^(4)
+
+#define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
+#define BOLDGREEN   "\033[1m\033[32m"      /* Bold Green */
+#define BOLDYELLOW  "\033[1m\033[33m"      /* Bold Yellow */
+#define BOLDWHITE   "\033[1m\033[37m"      /* Bold White */
+#define RESET   "\033[0m"				   /* Reset color */
 
 struct Forza {
 	float x;
@@ -29,9 +35,6 @@ sensor_msgs::LaserScan laser;
 nav_msgs::Odometry odom;
 geometry_msgs::Twist vel_joystick;
 geometry_msgs::Twist vel_stageros;
-
-bool trap = true;
-float exit_trap = 0;
 
 //Funzione ausiliaria che calcola il minimo su un array e ritorna quel valore. 
 //Usato per capire se l'ostacolo proviene da sinistra o da destra
@@ -86,7 +89,11 @@ int main(int argc , char* argv []){
 	ros::Subscriber command_sub = n.subscribe("/vel_joystick",1,callback_joystick);	//Subscribe to the chatter topic /vel_joystick
 																					//callback_joystick() call anytime a new message arrives
 	 
-	ros::Rate r(1000); //the Rate instance will attempt to keep the loop at 1000hz by accounting for the time used by the work done during the loop		
+	ros::Rate r(1000); //the Rate instance will attempt to keep the loop at 1000hz by accounting for the time used by the work done during the loop	
+
+	//Le seguenti variabili servono per prevenire deadlock
+	bool trap = true;
+	float exit_trap = 0;	
 
 	while(ros::ok()){
 		angolo_base_mobile = odom.pose.pose.orientation.z * M_PI;
@@ -121,7 +128,7 @@ int main(int argc , char* argv []){
 		 * che agiscono sul robot.
 		 */
 
-		printf("Velocità lineare: %f; Velocità angolare: %f\n", vel_joystick.linear.x, vel_joystick.angular.z); //DEBUG
+		printf(BOLDWHITE "Velocità lineare joystick: %f. Velocità angolare joystick: %f.\n", vel_joystick.linear.x, vel_joystick.angular.z); //DEBUG
 
 		float incremento_radian = 270 / (len * 56.5) ;		// differenza in radianti delle misure adiacenti del laser
 		float angolo_estremo_destro = angolo_base_mobile - incremento_radian*lunghezza_centro/2; // valore dell'angolo per la misura più a destra del vettore centro
@@ -168,29 +175,38 @@ int main(int argc , char* argv []){
 		 * 				  gli ostacoli mantenendo invariato il coefficiente che determina la distanza dal quale il Robot doveva reagire.
 		 * 				  L'aumento di tale coefficiente non porta ad una soluzione poiché il robot in questo modo non sarebbe potuto 
 		 * 			      entrare negli spazi più stretti. Utilizzando questo terzo stato intermedio si permette dunque al Robot di navigare
-		 *                con valori abbastanza grandi di velocità e, allo stesso tempo, di poter passare anche negli spazi stretti.
+		 *                con valori relativamente grandi di velocità e, allo stesso tempo, di poter passare anche negli spazi stretti.
 		 * 
-		 * 		3.Il Robot reagisce agli ostacoli e li evita cambiando i valori della velocità lineare e angolare.     (DANGER)
-		 * 
-		 * 		4. Il Robot capisce di trovarsi in una trappola e tenta di uscirne.		(TRAP)
+		 * 		3. Il Robot capisce di trovarsi in una trappola e tenta di uscirne.		(DANGER)
 		 * */
 
-		//Se non mando una velocità lineare, v_a_imposta sara nulla
-		float v_a_imposta = 0;	//La velocità angolare che viene aggiunta a quella del joystick 
-								//per redirezionare la base mobile secondo il verso giusto
-		//Altrimenti:
+		float vel_imp = 0;	//La velocità angolare che viene sommata a quella del joystick 
+							//per redirezionare la base mobile secondo il verso giusto
+
 		if(vel_joystick.linear.x > 0){
-			v_a_imposta = K_VELOCITA_IMPOSTA * fmodf(angolo_giusto - angolo_base_mobile  , M_PI);
+			vel_imp = K_VELOCITA_IMPOSTA * fmodf(angolo_giusto - angolo_base_mobile  , M_PI);
 		}
 
-		printf("Velocita imposta :%f\n\n",v_a_imposta); //DEBUG
+		printf("Velocità imposta:%f.\n\n" RESET,vel_imp); //DEBUG
 
-		vel_stageros.angular.z = vel_joystick.angular.z + v_a_imposta;  //Velocità angolare da mandare al nodo /stageros
+		vel_stageros.angular.z = vel_joystick.angular.z + vel_imp;  //Velocità angolare da mandare al nodo /stageros
 		
 		float k = 1;	// coefficiente che moltiplica la velocità lineare della base mobile ed e' 
 						// tanto piccolo quanto più è corta la distanza dagli ostacoli
+		
+		// Uso della funzione aux per calcolare la distanza minima rilevata
+		float valore_min_fronte = min_array(fronte,lunghezza_fronte);	
+		float valore_min_centro = min_array(centro,lunghezza_centro);	
 
-		float valore_min_fronte = min_array(fronte,lunghezza_fronte);	// Uso della funzione aux per calcolare la distanza minima rilevata
+		if( valore_min_fronte < WARNING_FRONT_PARAM ){			//Se davanti al robot si trova un ostacolo e non ha via di uscita 
+			printf(BOLDRED "DANGER:\nObstacle distance: %f\n" RESET, valore_min_fronte);
+		}
+		else if( valore_min_centro <  WARNING_CENTER_PARAM ){
+			printf(BOLDYELLOW "WARNING:\nObstacle distance: %f\n" RESET, valore_min_fronte);
+		}
+		else{
+			printf(BOLDGREEN "SAFE\n" RESET);
+		}
 
 		if( valore_min_fronte < WARNING_FRONT_PARAM ){			//Se davanti al robot si trova un ostacolo e non ha via di uscita 
 			k = 0;				// Evita che la base mobile sbatta contro l'ostacolo se non ha spazio ai lati
@@ -198,7 +214,7 @@ int main(int argc , char* argv []){
 				if (vel_joystick.linear.x>0){
 					vel_joystick.linear.x=0;
 					trap = false;
-					if(v_a_imposta > 0) exit_trap = 0.5;
+					if(vel_imp > 0) exit_trap = 0.5;
 					else exit_trap = -0.5;
 				}
 			}
@@ -208,11 +224,8 @@ int main(int argc , char* argv []){
 			trap=true;
 			exit_trap=0;
 		}
-		if(trap == true) printf("trap=true");
-		else printf("trap=false");	
-		printf("valore k:%f\n",k);
-
-		float valore_min_centro = min_array(centro,lunghezza_centro);
+		
+		printf(BOLDWHITE "k:%f\n" RESET,k);
 
 		if( valore_min_centro <  WARNING_CENTER_PARAM ){
 			if(valore_min_fronte > WARNING_FRONT_PARAM ) k = valore_min_centro / (WARNING_CENTER_PARAM);     // Piu vicino è l'ostacolo, minore il coefficiente
