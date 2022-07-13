@@ -6,10 +6,10 @@
 #include <cmath>
 #include "std_msgs/String.h"
 
-#define PARAM_FRONTE 475        
-#define PARAM_VISUALE 400       
-#define WARNING_CENTER_PARAM 1.5  // Distanza di sicurezza
-#define WARNING_FRONT_PARAM 0.35
+#define PARAM_FRONTE 450       
+#define PARAM_VISUALE 380       
+#define WARNING_CENTER_PARAM 1.3  // Distanza di sicurezza
+#define WARNING_FRONT_PARAM 0.3
 #define K_OSTACOLI 0.000001  // 10^(-6)
 #define K_VELOCITA_IMPOSTA 10000 // 10^(4)
 
@@ -93,12 +93,14 @@ int main(int argc , char* argv []){
 
 	//Le seguenti variabili servono per prevenire deadlock
 	bool trap = true;
+	float hard_trap = false;
 	float exit_trap = 0;	
 
 	while(ros::ok()){
 		angolo_base_mobile = odom.pose.pose.orientation.z * M_PI;
 		vel_stageros.linear.x=0;
 		vel_stageros.angular.z=0;
+		
 		
 		int len = laser.ranges.size();				 // misura la lunghezza dell'array che mantiene tutti i valori del laser (1081)
 		int lunghezza_centro = len - 2*PARAM_VISUALE;  // misura la lunghezza dell'array che mantiene solo i valori centrali del laser (281)
@@ -198,7 +200,7 @@ int main(int argc , char* argv []){
 		float valore_min_fronte = min_array(fronte,lunghezza_fronte);	
 		float valore_min_centro = min_array(centro,lunghezza_centro);	
 
-		if( valore_min_fronte < WARNING_FRONT_PARAM ){			//Se davanti al robot si trova un ostacolo e non ha via di uscita 
+		if( valore_min_fronte < WARNING_FRONT_PARAM ){			
 			printf(BOLDRED "DANGER:\nObstacle distance: %f\n" RESET, valore_min_fronte);
 		}
 		else if( valore_min_centro <  WARNING_CENTER_PARAM ){
@@ -208,38 +210,65 @@ int main(int argc , char* argv []){
 			printf(BOLDGREEN "SAFE\n" RESET);
 		}
 
-		if( valore_min_fronte < WARNING_FRONT_PARAM ){			//Se davanti al robot si trova un ostacolo e non ha via di uscita 
+		if( valore_min_fronte < WARNING_FRONT_PARAM ){			//Se davanti al robot si trova un ostacolo
 			k = 0;				// Evita che la base mobile sbatta contro l'ostacolo se non ha spazio ai lati
 			if(trap == true){
 				if (vel_joystick.linear.x>0){
-					vel_joystick.linear.x=0;
 					trap = false;
-					if(vel_imp > 0) exit_trap = 0.5;
-					else exit_trap = -0.5;
+					if(vel_imp > 0) exit_trap = 0,5;
+					else if (vel_imp<0) exit_trap = -0,5;
+					if(vel_imp==0,064373 || vel_imp==-0,064373) hard_trap=true;	//Se davanti al robot si trova un ostacolo e non ha via di uscita 
+					vel_stageros.angular.z += exit_trap;
 				}
+				
+				else if (vel_joystick.linear.x=0){
+					trap =false;
+					hard_trap=true;
+					exit_trap=0;
+					vel_stageros.angular.z = 0;
+				}
+				
 			}
-			vel_stageros.angular.z += exit_trap;
 		}
 		else{
+			hard_trap=false;
 			trap=true;
 			exit_trap=0;
 		}
-		
-		printf(BOLDWHITE "k:%f\n" RESET,k);
 
 		if( valore_min_centro <  WARNING_CENTER_PARAM ){
 			if(valore_min_fronte > WARNING_FRONT_PARAM ) k = valore_min_centro / (WARNING_CENTER_PARAM);     // Piu vicino è l'ostacolo, minore il coefficiente
 		}
+		else{
+			hard_trap=false;
+		}
 		
 		k = pow(k,2);
-		if(vel_joystick.linear.x > 0.0 ){
-			vel_stageros.linear.x = 2 * k * vel_joystick.linear.x;   // La velocità lineare da mandare al nodo /stageros
+
+		if (hard_trap==true){
+			if (vel_joystick.linear.x>0){
+				printf(BOLDRED "ATTEMPT TO EXIT THE TRAP\n" RESET);
+				vel_stageros.angular.z = M_PI;
+				vel_stageros.linear.x=0;
+			}
+			else{
+				printf(BOLDRED "TRAP\n" RESET);
+				vel_stageros.linear.x=vel_joystick.linear.x;
+				vel_stageros.angular.z=vel_joystick.angular.z;
+			}
+			
 		}
 		else{
-			vel_stageros.linear.x=vel_joystick.linear.x;
+			if(vel_joystick.linear.x > 0.0 ){
+				vel_stageros.linear.x = 2 * k * vel_joystick.linear.x;   // La velocità lineare da mandare al nodo /stageros
+			}
+			else{
+				vel_stageros.linear.x=vel_joystick.linear.x;
+			}
 		}
 		
-		
+		printf(BOLDWHITE "k:%f\n" RESET,k);
+
 		/* Terza e ultima parte del codice dove si fa la publicazione della velocita verso il nodo /stageros
 		 */
 		
