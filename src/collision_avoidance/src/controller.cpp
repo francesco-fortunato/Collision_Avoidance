@@ -6,12 +6,14 @@
 #include <cmath>
 #include "std_msgs/String.h"
 
-#define PARAM_FRONTE 450       
-#define PARAM_VISUALE 380       
-#define WARNING_CENTER_PARAM 1.3  // Distanza di sicurezza
-#define WARNING_FRONT_PARAM 0.3
-#define K_OSTACOLI 0.000001  // 10^(-6)
-#define K_VELOCITA_IMPOSTA 10000 // 10^(4)
+#define FRONT_PARAM 450     //numero di valori da togliere sia da destra che da sinistra dall'array laser.ranges
+							//per ottenere i valori frontali
+#define VISUAL_PARAM 380    //numero di valori da togliere sia da destra che da sinistra dall'array laser.ranges
+							//per ottenere una porzione più ampia di valori   
+#define WARNING_CENTER_PARAM 1.3  //distanza di sicurezza minima
+#define DANGER_FRONT_PARAM 0.3   //distanza di sicurezza massima
+#define K_OBSTACLE 0.000001  //coefficiente usato per ottenere la forza repulsiva generata dagli ostacoli. 10^(-6)
+#define K_ANG_VEL 10000 //coefficiente usato per ottenere la velocità angolare generata dagli ostacoli. 10^(4)
 
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
 #define BOLDGREEN   "\033[1m\033[32m"      /* Bold Green */
@@ -19,15 +21,15 @@
 #define BOLDWHITE   "\033[1m\033[37m"      /* Bold White */
 #define RESET   "\033[0m"				   /* Reset color */
 
+//Struttura usata per definire la forza generata dal joystick e dagli ostacoli
 struct Forza {
 	float x;
 	float y;
 };
 
-float angolo_base_mobile;
-Forza* f_att = (Forza*) malloc( sizeof( Forza ) );
-Forza* f_rep = (Forza*) malloc( sizeof( Forza ) );
-Forza* f_ris = (Forza*) malloc( sizeof( Forza ) );
+Forza* f_att = (Forza*) malloc(sizeof(Forza)); //forza generata dal joystick
+Forza* f_rep = (Forza*) malloc(sizeof(Forza)); //forza generata dagli ostacoli
+Forza* f_ris = (Forza*) malloc(sizeof(Forza)); //forza risultante
 
 
 // Variabili globali che puntano ai messaggi ricevuti dal nodo controller
@@ -41,16 +43,13 @@ geometry_msgs::Twist vel_stageros;
 //e per capire se l'ostacolo si trova abbastanza vicino da poter reagire
 float min_array(float array[], int len){
 	float min = array[0];
-	for(int k=0; k < len; k++)
-	{
-		if(array[k] < min )
-		{
+	for(int k=0; k < len; k++){
+		if(array[k] < min ){
 			min = array[k];
 		}
 	}
 	return min;
-} 
-
+}
 
 //funzione callback per il LaserScan
 void callback_scan(const sensor_msgs::LaserScan::ConstPtr& msg){
@@ -85,11 +84,12 @@ int main(int argc , char* argv []){
 	ros::Subscriber odometry_sub = n.subscribe("/odom", 1000, callback_odom);	//Subscribe to the chatter topic /odom
 																				//callback_odom() call anytime a new message arrives
 
-
 	ros::Subscriber command_sub = n.subscribe("/vel_joystick",1,callback_joystick);	//Subscribe to the chatter topic /vel_joystick
 																					//callback_joystick() call anytime a new message arrives
 	 
 	ros::Rate r(1000); //the Rate instance will attempt to keep the loop at 1000hz by accounting for the time used by the work done during the loop	
+
+	float angolo_base_mobile;	//angolo della base mobile rispetto alla mappa
 
 	//Le seguenti variabili servono per prevenire deadlock
 	bool trap = true;
@@ -97,70 +97,73 @@ int main(int argc , char* argv []){
 	float exit_trap = 0;	
 
 	while(ros::ok()){
-		angolo_base_mobile = odom.pose.pose.orientation.z * M_PI;
+
+		angolo_base_mobile = odom.pose.pose.orientation.z * M_PI; 
 		vel_stageros.linear.x=0;
 		vel_stageros.angular.z=0;
 		
 		
-		int len = laser.ranges.size();				 // misura la lunghezza dell'array che mantiene tutti i valori del laser (1081)
-		int lunghezza_centro = len - 2*PARAM_VISUALE;  // misura la lunghezza dell'array che mantiene solo i valori centrali del laser (281)
-		int lunghezza_fronte = len - 2*PARAM_FRONTE;  // misura la lunghezza dell'array che mantiene solo i valori frontali del laser (81)
+		int len = laser.ranges.size();	// misura la lunghezza dell'array che mantiene tutti i valori del laser (1081)
+		int center_len = len - 2*VISUAL_PARAM;  // misura la lunghezza dell'array che mantiene solo i valori centrali del laser (321)
+		int front_len = len - 2*FRONT_PARAM;  // misura la lunghezza dell'array che mantiene solo i valori frontali del laser (181)
 
-		
-		/* In questa prima parte del codice vengono creati due array:
-		 * Il primo, definito come centro, ha lungezza pari a len - 2*PARAM_VISUALE, e contiene i valori centrali della visuale del laser.
+		/* In questa prima parte vengono creati due array:
+		 * Il primo, definito come centro, ha lungezza pari a len - 2*VISUAL_PARAM, e contiene i valori centrali della visuale del laser.
 		 * Questo viene utilizzato per capire se ci sono ostacoli davanti al Robot.
-		 * Il secondo, definito come fronte, ha lunghezza pari a len - 2*PARAM_FRONTE, e contine i valori frontali della visuale del laser.
+		 * Il secondo, definito come fronte, ha lunghezza pari a len - 2*FRONT_PARAM, e contine i valori frontali della visuale del laser.
 		 * Questo viene utilizzato per capire se il robot ha di fronte a se un ostacolo
 		 * */
 		
-		float centro[lunghezza_centro], fronte[lunghezza_fronte];
+		float centro[center_len], fronte[front_len];
 		
-		//Popolazione di array centro e fronte
+		//Popolazione degli array centro e fronte con i valori ricevuti dal laser
 		for(int i = 0; i < len; i++){
-			if(i >= PARAM_VISUALE &&  i < len-PARAM_VISUALE){
-				centro[i - PARAM_VISUALE]=laser.ranges[i];
+			if(i >= VISUAL_PARAM &&  i < len-VISUAL_PARAM){
+				centro[i - VISUAL_PARAM]=laser.ranges[i];
 			}
-			if(i >= PARAM_FRONTE &&  i < len-PARAM_FRONTE){
-				fronte[i - PARAM_FRONTE]=laser.ranges[i];
+			if(i >= FRONT_PARAM &&  i < len-FRONT_PARAM){
+				fronte[i - FRONT_PARAM]=laser.ranges[i];
 			}
 		}
+
+		printf(BOLDWHITE "Velocità lineare ricevuta dal joystick: %f. Velocità angolare ricevuta dal joystick: %f.\n", vel_joystick.linear.x, vel_joystick.angular.z); //DEBUG
 
 		/* In questa seconda parte vengono calcolate le componenti x e y delle forze repulsive generate dagli ostacoli
 		 * che agiscono sul robot.
 		 */
 
-		printf(BOLDWHITE "Velocità lineare joystick: %f. Velocità angolare joystick: %f.\n", vel_joystick.linear.x, vel_joystick.angular.z); //DEBUG
-
-		float incremento_radian = 270 / (len * 56.5) ;		// differenza in radianti delle misure adiacenti del laser
-		float angolo_estremo_destro = angolo_base_mobile - incremento_radian*lunghezza_centro/2; // valore dell'angolo per la misura più a destra del vettore centro
-		
 		f_rep->x=0;
 		f_rep->y=0;
-		//Ciclo che calcola le componenti x e y della forza repulsiva che ogni ostacolo crea			
-		for(int i=0;i<lunghezza_centro;i++){
+		
+		float incremento_radian = 270 / (len * 56.5) ;		// differenza in radianti delle misure adiacenti del laser
+		float angolo_estremo_destro = angolo_base_mobile - incremento_radian*center_len/2; // valore dell'angolo più a destra del vettore centro
+
+		//Ciclo che calcola le componenti x e y della forza repulsiva che ogni ostacolo crea 			
+		for(int i=0;i<center_len;i++){
 			if(centro[i] < WARNING_CENTER_PARAM){
 				float valore_secondo_distanza = WARNING_CENTER_PARAM - centro[i];
 				valore_secondo_distanza = pow(valore_secondo_distanza,5);
-				f_rep->x += K_OSTACOLI * (-valore_secondo_distanza * cos(angolo_estremo_destro + i*incremento_radian));
-				f_rep->y += K_OSTACOLI * (-valore_secondo_distanza * sin(angolo_estremo_destro + i*incremento_radian));
+				f_rep->x += K_OBSTACLE * (-valore_secondo_distanza * cos(angolo_estremo_destro + i*incremento_radian));
+				f_rep->y += K_OBSTACLE * (-valore_secondo_distanza * sin(angolo_estremo_destro + i*incremento_radian));
 				//printf("L'ostacolo a distanza: %f, crea una comp_x:%f   e  comp_y:%f \n",centro[i],(- centro[i] * cos(angolo_estremo_destro + i*incremento_radian) ),(- centro[i] * sin(angolo_estremo_destro + i*incremento_radian) ) );
 			}
 		}
 		
+		//Calcolo delle componenti x e y della forza generata dalla forza mandata dal joystick
 		f_att->x = vel_joystick.linear.x * cos(angolo_base_mobile);	
 		f_att->y = vel_joystick.linear.x * sin(angolo_base_mobile);					
 		
-		//Angolo generato dalle componenti della forza repulsiva
-		float angolo_giusto=angolo_base_mobile;
+		
+		float angolo_giusto=angolo_base_mobile; //Angolo generato dalle forze repulsive (se in gioco) 
+
 		f_ris->x = f_att->x + f_rep->x;	//Sommo le componenti secondo x e y delle forze agenti sulla base mobile
 		f_ris->y = f_att->y + f_rep->y;
 		
 		//Calcolo l'angolo che la direzione della forza risultante forma con l'asse delle x 
-		if(f_ris->x != 0  || f_ris->y != 0){
-			angolo_giusto = atan(f_ris->y / f_ris->x);
-			if(f_ris->x < 0 ){ 
-				if(f_ris->y > 0 ) angolo_giusto += M_PI;
+		if(f_ris->x != 0 || f_ris->y != 0){
+			angolo_giusto = atan(f_ris->y / f_ris->x);	//Angolo generato dalle componenti della forza repulsiva
+			if(f_ris->x < 0){
+				if(f_ris->y > 0) angolo_giusto += M_PI;
 				else angolo_giusto -= M_PI;
 			}
 		}
@@ -182,25 +185,26 @@ int main(int argc , char* argv []){
 		 * 		3. Il Robot capisce di trovarsi in una trappola e tenta di uscirne.		(DANGER)
 		 * */
 
-		float vel_imp = 0;	//La velocità angolare che viene sommata a quella del joystick 
-							//per redirezionare la base mobile secondo il verso giusto
+		float vel_ang_imp = 0;	//La velocità angolare che viene sommata a quella ricevuta del joystick 
+								//per redirezionare la base mobile secondo il verso giusto
 
+		//Si agisce nel momento in cui la velocità lineare è maggiore di zero
 		if(vel_joystick.linear.x > 0){
-			vel_imp = K_VELOCITA_IMPOSTA * fmodf(angolo_giusto - angolo_base_mobile  , M_PI);
+			vel_ang_imp = K_ANG_VEL * fmodf(angolo_giusto - angolo_base_mobile  , M_PI);
 		}
 
-		printf("Velocità imposta:%f.\n\n" RESET,vel_imp); //DEBUG
+		printf("Velocità imposta:%f.\n\n" RESET, vel_ang_imp); //DEBUG
 
-		vel_stageros.angular.z = vel_joystick.angular.z + vel_imp;  //Velocità angolare da mandare al nodo /stageros
+		vel_stageros.angular.z = vel_joystick.angular.z + vel_ang_imp;  //Velocità angolare da mandare al nodo /stageros
 		
 		float k = 1;	// coefficiente che moltiplica la velocità lineare della base mobile ed e' 
 						// tanto piccolo quanto più è corta la distanza dagli ostacoli
 		
 		// Uso della funzione aux per calcolare la distanza minima rilevata
-		float valore_min_fronte = min_array(fronte,lunghezza_fronte);	
-		float valore_min_centro = min_array(centro,lunghezza_centro);	
+		float valore_min_fronte = min_array(fronte,front_len);	
+		float valore_min_centro = min_array(centro,center_len);	
 
-		if( valore_min_fronte < WARNING_FRONT_PARAM ){			
+		if( valore_min_fronte < DANGER_FRONT_PARAM ){			
 			printf(BOLDRED "DANGER:\nObstacle distance: %f\n" RESET, valore_min_fronte);
 		}
 		else if( valore_min_centro <  WARNING_CENTER_PARAM ){
@@ -210,24 +214,23 @@ int main(int argc , char* argv []){
 			printf(BOLDGREEN "SAFE\n" RESET);
 		}
 
-		if( valore_min_fronte < WARNING_FRONT_PARAM ){			//Se davanti al robot si trova un ostacolo
-			k = 0;				// Evita che la base mobile sbatta contro l'ostacolo se non ha spazio ai lati
+		if(valore_min_fronte < DANGER_FRONT_PARAM){	//Se davanti al robot si trova un ostacolo
+			k = 0;		//Evita che la base mobile sbatta contro l'ostacolo se non ha spazio ai lati
 			if(trap == true){
 				if (vel_joystick.linear.x>0){
 					trap = false;
-					if(vel_imp > 0) exit_trap = 0,5;
-					else if (vel_imp<0) exit_trap = -0,5;
-					if(vel_imp==0,064373 || vel_imp==-0,064373) hard_trap=true;	//Se davanti al robot si trova un ostacolo e non ha via di uscita 
+					if(vel_ang_imp > 0) exit_trap = 0,5;
+					else if (vel_ang_imp<0) exit_trap = -0,5;
+					if(vel_ang_imp==0,064373 || vel_ang_imp==-0,064373) hard_trap=true;	//Se davanti al robot si trova un ostacolo e non ha via di uscita 
 					vel_stageros.angular.z += exit_trap;
 				}
 				
-				else if (vel_joystick.linear.x=0){
+				else if (vel_joystick.linear.x==0){
 					trap =false;
 					hard_trap=true;
 					exit_trap=0;
 					vel_stageros.angular.z = 0;
-				}
-				
+				}	
 			}
 		}
 		else{
@@ -237,7 +240,7 @@ int main(int argc , char* argv []){
 		}
 
 		if( valore_min_centro <  WARNING_CENTER_PARAM ){
-			if(valore_min_fronte > WARNING_FRONT_PARAM ) k = valore_min_centro / (WARNING_CENTER_PARAM);     // Piu vicino è l'ostacolo, minore il coefficiente
+			if(valore_min_fronte > DANGER_FRONT_PARAM ) k = valore_min_centro / (WARNING_CENTER_PARAM);     //Più vicino è l'ostacolo, minore il coefficiente
 		}
 		else{
 			hard_trap=false;
