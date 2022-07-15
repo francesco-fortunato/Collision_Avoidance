@@ -13,7 +13,7 @@
 
 1.  A questo punto avviare roscore utilizzando il comando `roscore`.
 
-1.  Aprire un nuovo terminale, clonare la repository del corso di lab. IAGI dell'anno 202-21.
+1.  Aprire un nuovo terminale, clonare la repository del corso di lab. IAGI dell'anno 2020-21, disponibile [qui](https://gitlab.com/grisetti/labiagi_2020_21)
 
 1.  Eseguire `cd ~/your/path/labiagi_2020_21/`.
 
