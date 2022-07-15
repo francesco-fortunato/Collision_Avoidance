@@ -1,6 +1,6 @@
 # COLLISION AVOIDANCE
 
-## Sistema di un robot basato su laser che impedise le collisioni.
+### Sistema di un robot basato su laser che impedise le collisioni.
 
 ![collision_avoidance](collision_avoidance.gif)
 
@@ -12,7 +12,7 @@ Gli ostacoli creano forze repulsive che modificano la traiettoria del robot. Que
 Le forze repulsive si sommano con le forze angolari e lineari generate dal joystick, modificano quindi le velocità lineari e angolari del robot.
 ![forze_risultanti](forze_risultanti.png)
 
-#### Passaggi da svolgere per testare il programma
+## Passaggi da svolgere per testare il programma
 1.  Aprire il terminale.
 
 1.  Eseguire il comando `cd ~/your/path/lab-IAGI-project`.
