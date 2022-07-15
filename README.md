@@ -2,6 +2,8 @@
 
 ## Sistema di un robot basato su laser che impedise le collisioni.
 
+![collision_avoidance](collision_avoidance.gif)
+
 ### Passaggi da svolgere per testare il programma
 1.  Aprire il terminale.
 
