@@ -4,7 +4,15 @@
 
 ![collision_avoidance](collision_avoidance.gif)
 
-### Passaggi da svolgere per testare il programma
+### How it works
+
+Gli ostacoli creano forze repulsive che modificano la traiettoria del robot. Questo è un esempio delle varie forze che vengono applicate sul robot: una velocità angolare imposta dal joystick nulla, una certa velocità lineare imposta dal joystick, una forza repulsiva generata dall'ostacolo a distanza r con le sue due componenti x e y
+![forze_repulsive](forze_repulsive.png)
+
+Le forze repulsive si sommano con le forze angolari e lineari generate dal joystick, modificano quindi le velocità lineari e angolari del robot.
+![forze_risultanti](forze_risultanti.png)
+
+#### Passaggi da svolgere per testare il programma
 1.  Aprire il terminale.
 
 1.  Eseguire il comando `cd ~/your/path/lab-IAGI-project`.
