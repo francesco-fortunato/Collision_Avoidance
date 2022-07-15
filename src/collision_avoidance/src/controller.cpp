@@ -6,7 +6,7 @@
 #include <cmath>
 #include "std_msgs/String.h"
 
-#define FRONT_PARAM 450     //numero di valori da togliere sia da destra che da sinistra dall'array laser.ranges
+#define FRONT_PARAM 430     //numero di valori da togliere sia da destra che da sinistra dall'array laser.ranges
 							//per ottenere i valori frontali
 #define VISUAL_PARAM 380    //numero di valori da togliere sia da destra che da sinistra dall'array laser.ranges
 							//per ottenere una porzione più ampia di valori   
@@ -66,7 +66,7 @@ void callback_joystick(const geometry_msgs::Twist::ConstPtr& msg){
 	vel_joystick = *msg;
 }
 
-/*****************                MAIN                ****************/
+/***************       MAIN           **************/
 int main(int argc , char* argv []){
 	
 	ros::init(argc,argv,"Collision_avoidance"); //Init del nodo nell'ambiente roscore
