@@ -73,7 +73,7 @@ int main(int argc , char* argv []){
 	ros::NodeHandle n; //NodeHandle is the main access point to communications with the ROS system
 		
 	/************      PUBLISHER          *************/	
-	ros::Publisher vel_pub;											//Publisher per il cmd_vel
+	ros::Publisher vel_pub;		//Publisher per il cmd_vel
 	vel_pub = n.advertise<geometry_msgs::Twist>("/cmd_vel", 1);	//Tell the master that we are going to publishing a message of type
                                                                 //Twist on the topic cmd_vel (only 1 message in queue)
 	
@@ -92,7 +92,7 @@ int main(int argc , char* argv []){
 	float angolo_base_mobile;	//angolo della base mobile rispetto alla mappa
 
 	//Le seguenti variabili servono per prevenire deadlock
-	bool trap = true;
+	bool danger = false;
 	float hard_trap = false;
 	float exit_trap = 0;	
 
@@ -162,7 +162,7 @@ int main(int argc , char* argv []){
 		//Calcolo l'angolo che la direzione della forza risultante forma con l'asse delle x 
 		if(f_ris->x != 0 || f_ris->y != 0){
 			angolo_giusto = atan(f_ris->y / f_ris->x);	//Angolo generato dalle componenti della forza repulsiva
-			if(f_ris->x < 0){
+			if(f_ris->x < 0){	
 				if(f_ris->y > 0) angolo_giusto += M_PI;
 				else angolo_giusto -= M_PI;
 			}
@@ -171,16 +171,19 @@ int main(int argc , char* argv []){
 
 		/*
 		 * La seconda parte è quella decisionale, ovvero la parte che permette al robot di evitare gli ostacoli e che assegna la velocità corretta al Robot
+		 * Dopo aver calcolato le forze repulsive generate dagli ostacoli, si esegue a seconda della situazione in cui si trova il robot.
 		 * 
-		 * Abbiamo 4 possibili situazioni in cui può trovarsi il robot:
+		 * Sono 3 le possibili situazioni:
+		 * 
 		 * 		1.Il Robot sta navigando e nelle vicinanze non si trova nessun ostacolo.   (SAFE)
 		 * 
 		 * 		2.Il Robot capisce che si sta avvicinando ad un ostacolo e reagisce diminuendo la sua velocita lineare.   (WARNING)
-		 * 			NOTA: Dopo alcune prove fatte, risultava che, aumentando la velocita lineare, il Robot a non riusciva ad evitare 
-		 * 				  gli ostacoli mantenendo invariato il coefficiente che determina la distanza dal quale il Robot doveva reagire.
-		 * 				  L'aumento di tale coefficiente non porta ad una soluzione poiché il robot in questo modo non sarebbe potuto 
-		 * 			      entrare negli spazi più stretti. Utilizzando questo terzo stato intermedio si permette dunque al Robot di navigare
-		 *                con valori relativamente grandi di velocità e, allo stesso tempo, di poter passare anche negli spazi stretti.
+		 * 			NOTA: nei casi in cui il robot sia estremamente vicino ad un'ostacolo, ovviamente, aumentando la velocita lineare in input, 
+		 * 			      il Robot a non riuscirebbe ad evitare gli ostacoli mantenendo invariato il coefficiente che determina 
+		 * 			      la distanza dal quale il Robot dovrebbe reagire.
+		 * 				  L'aumento di tale coefficiente non porta ad una soluzione poiché il robot in questo modo non riuscirebbe ad
+		 * 			      entrare negli spazi più stretti. Utilizzando quindi questo terzo stato intermedio si permette dunque al Robot di navigare
+		 *                con valori non nulli di velocità lineare e, allo stesso tempo, di poter passare anche negli spazi stretti.
 		 * 
 		 * 		3. Il Robot capisce di trovarsi in una trappola e tenta di uscirne.		(DANGER)
 		 * */
@@ -193,17 +196,18 @@ int main(int argc , char* argv []){
 			vel_ang_imp = K_ANG_VEL * fmodf(angolo_giusto - angolo_base_mobile  , M_PI);
 		}
 
-		printf("Velocità imposta:%f.\n\n" RESET, vel_ang_imp); //DEBUG
+		printf("Velocità imposta:%f.\n\n" RESET, vel_ang_imp); //Log
 
 		vel_stageros.angular.z = vel_joystick.angular.z + vel_ang_imp;  //Velocità angolare da mandare al nodo /stageros
 		
-		float k = 1;	// coefficiente che moltiplica la velocità lineare della base mobile ed e' 
-						// tanto piccolo quanto più è corta la distanza dagli ostacoli
+		float k = 1;	// coefficiente che moltiplica la velocità lineare della base mobile ed è
+						// tanto più piccolo quanto più è piccola la distanza dagli ostacoli.
 		
 		// Uso della funzione aux per calcolare la distanza minima rilevata
 		float valore_min_fronte = min_array(fronte,front_len);	
 		float valore_min_centro = min_array(centro,center_len);	
 
+		// Logs
 		if( valore_min_fronte < DANGER_FRONT_PARAM ){			
 			printf(BOLDRED "DANGER:\nObstacle distance: %f\n" RESET, valore_min_fronte);
 		}
@@ -216,54 +220,68 @@ int main(int argc , char* argv []){
 
 		if(valore_min_fronte < DANGER_FRONT_PARAM){	//Se davanti al robot si trova un ostacolo
 			k = 0;		//Evita che la base mobile sbatta contro l'ostacolo se non ha spazio ai lati
-			if(trap == true){
+			if(danger == false){
 				if (vel_joystick.linear.x>0){
-					trap = false;
+					danger = true;
 					if(vel_ang_imp > 0) exit_trap = 0,5;
 					else if (vel_ang_imp<0) exit_trap = -0,5;
-					if(vel_ang_imp==0,064373 || vel_ang_imp==-0,064373) hard_trap=true;	//Se davanti al robot si trova un ostacolo e non ha via di uscita 
+					if(vel_ang_imp==0,064373 || vel_ang_imp==-0,0643 || vel_ang_imp==0) hard_trap=true;	//Se davanti al robot si trova un ostacolo e non ha via di uscita 
 					vel_stageros.angular.z += exit_trap;
+					if((vel_joystick.angular.z==-1 && exit_trap==0,5) || (vel_joystick.angular.z==1 && exit_trap==-0,5)){
+						vel_stageros.angular.z+=exit_trap;
+					}
 				}
 				
 				else if (vel_joystick.linear.x==0){
-					trap =false;
+					danger =true;
 					hard_trap=true;
 					exit_trap=0;
 					vel_stageros.angular.z = 0;
 				}	
 			}
 		}
-		else{
+		else{	//Se non vi sono ostacoli davanti al robot
 			hard_trap=false;
-			trap=true;
+			danger=false;
 			exit_trap=0;
 		}
 
-		if( valore_min_centro <  WARNING_CENTER_PARAM ){
-			if(valore_min_fronte > DANGER_FRONT_PARAM ) k = valore_min_centro / (WARNING_CENTER_PARAM);     //Più vicino è l'ostacolo, minore il coefficiente
+		if( valore_min_centro <  WARNING_CENTER_PARAM ){	//se vi sono ostacoli intorno al robot
+			if(valore_min_fronte > DANGER_FRONT_PARAM ){	//se essi non sono esattamente di fronte
+				k = valore_min_centro / (WARNING_CENTER_PARAM);     //modifica il coefficiente
+				hard_trap=false;
+			} 
 		}
 		else{
 			hard_trap=false;
 		}
 		
-		k = pow(k,2);
+		k = pow(k,2);	//se k=1, k^2=1. Se k<1, k^2<1. 
 
-		if (hard_trap==true){
-			if (vel_joystick.linear.x>0){
+		if (hard_trap==true){	//se l'ostacolo è troppo vicino al robot
+			if (vel_joystick.linear.x>0){	//se si prova a proseguire dritti
 				printf(BOLDRED "ATTEMPT TO EXIT THE TRAP\n" RESET);
-				vel_stageros.angular.z = M_PI;
-				vel_stageros.linear.x=0;
+				vel_stageros.linear.x=0;	//se si va dritti si sbatte, non andare avanti. Piuttosto gira
+				if(vel_joystick.angular.z>0){
+					vel_stageros.angular.z = M_PI;
+				}
+				else if(vel_joystick.angular.z<0){
+					vel_stageros.angular.z = -M_PI;
+				}
+				else if (vel_joystick.angular.z==0) {
+					vel_stageros.angular.z = 0.5;
+				}
 			}
 			else{
-				printf(BOLDRED "TRAP\n" RESET);
+				printf(BOLDRED "TRAP\n" RESET);	//se si sta fermi rimani fermo
 				vel_stageros.linear.x=vel_joystick.linear.x;
 				vel_stageros.angular.z=vel_joystick.angular.z;
 			}
 			
 		}
-		else{
+		else{	//se l'ostacolo non è troppo vicino, usa le forze
 			if(vel_joystick.linear.x > 0.0 ){
-				vel_stageros.linear.x = 2 * k * vel_joystick.linear.x;   // La velocità lineare da mandare al nodo /stageros
+				vel_stageros.linear.x = 2 * k * vel_joystick.linear.x;   
 			}
 			else{
 				vel_stageros.linear.x=vel_joystick.linear.x;
@@ -272,12 +290,10 @@ int main(int argc , char* argv []){
 		
 		printf(BOLDWHITE "k:%f\n" RESET,k);
 
-		/* Terza e ultima parte del codice dove si fa la publicazione della velocita verso il nodo /stageros
+		/* Terza e ultima parte del codice dove si pubblica la velocità verso il nodo /stageros
 		 */
 		
-		vel_pub.publish(vel_stageros);
-
-		
+		vel_pub.publish(vel_stageros);		//Publish message to node /stageros
 
 	    ros::spinOnce();
 	    r.sleep();
