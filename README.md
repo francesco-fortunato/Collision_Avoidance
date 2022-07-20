@@ -2,12 +2,12 @@
 
 ### Sistema di un robot basato su laser che impedise le collisioni.
 
-### How it works
+### Come funziona
 
-Gli ostacoli creano forze repulsive che modificano la traiettoria del robot. Questo è un esempio delle varie forze che vengono applicate sul robot: una velocità angolare imposta dal joystick nulla, una certa velocità lineare imposta dal joystick, una forza repulsiva generata dall'ostacolo a distanza r con le sue due componenti x e y
+Gli ostacoli creano forze repulsive che modificano la traiettoria del robot. Di seguito viene mostrato un esempio in cui viene data in input una certa velocità lineare e una velocità angolare nulla, con l'illustrazione dei vettori delle varie forze che vengono applicate dunque sul robot: una velocità angolare imposta dal joystick (nulla), una certa velocità lineare imposta dal joystick, una forza repulsiva generata dall'ostacolo a distanza r con le sue due componenti x e y
 ![forze_repulsive](forze_repulsive.png)
 
-Le forze repulsive si sommano con le forze angolari e lineari generate dal joystick, modificano quindi le velocità lineari e angolari del robot.
+Le forze repulsive agiscono sulle velocità angolari e lineari ricevute dal joystick, modificandone i valori qualora gli ostacoli dovessero essere troppo vicini al robot. La nuova velocità lineare varrà 2 * k^2 * old_linear_vel, dove k varrà 1 se non ci sono ostacoli vicini al robot (*SAFE*), r/WARNING_CENTER_PARAM se l'ostacolo è vicino (*WARNING*) e 0 se l'ostacolo si trova **troppo** vicino al robot (*TRAP*).
 ![forze_risultanti](forze_risultanti.png)
 
 Di seguito un esempio del funzionamento
@@ -30,7 +30,7 @@ Di seguito un esempio del funzionamento
 
 1.  Eseguire `cd ~/your/path/labiagi_2020_21/workspaces/srrg2_labiagi/src/srrg2_navigation_2d/config`.
 
-1.  Da qui, aprire un terminale per ogni punto ed eseguire questi comandi:
+1.  Da qui, aprire un terminale per ogni punto ed eseguire questi comandi: (eseguire `source ~your/path/labiagi_2020_21/workspaces/srrg2_labiagi/devel/setup.bash` prima di eseguire i punti i e ii, mentre `source ~/your/path/lab-IAGI-project/devel/setup.bash` prima del punto iii.
 	
 	1.  `rosrun stage_ros stageros cappero_laser_odom_diag_obstacle_2020-05-06-16-26-03.world`  -> lancia il nodo /stageros e apre una finestra che mostra la navigazione del Robot sulla mappa
 	
@@ -41,8 +41,8 @@ Di seguito un esempio del funzionamento
 	
 
 Strumenti utili per il debug:
-rosrun rqt_graph rqt_graph  -> Grafico che mostra i nodi, itopic e la loro relazione;
-rosmsg show <package>/<nome_messaggio>  ->  Mostra la definizione del messaggio;
-rosmsg  list -> Mostra la lista di tutti i messaggi disponibili   ( | grep <parte_del_messaggio>   -> per filtrare i messaggi);
-rostopic pub [-r] [frequenza(Hz)] <nome_topic> <tipo_messaggio>   -> Pubblica da un certo topic;
-rostopic echo <nome_topic> [-nNUM]  -> lLegge un topic [opzione dove si leggono solo i NUM ultimi messaggi];	
+- `rosrun rqt_graph rqt_graph`  -> Grafico che mostra i nodi, i topic e la loro relazione;
+- `rosmsg show <package>/<nome_messaggio>`  ->  Mostra la definizione del messaggio;
+- `rosmsg  list` -> Mostra la lista di tutti i messaggi disponibili   ( `| grep <parte_del_messaggio>`   -> per filtrare i messaggi);
+- `rostopic pub [-r] [frequenza(Hz)] <nome_topic> <tipo_messaggio>`   -> Pubblica da un certo topic;
+- `rostopic echo <nome_topic> [-nNUM]`  -> Legge un topic [opzione dove si leggono solo i NUM ultimi messaggi];	
