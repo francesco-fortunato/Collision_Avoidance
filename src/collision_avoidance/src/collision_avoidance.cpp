@@ -27,9 +27,9 @@ struct Forza {
 	float y;
 };
 
-Forza* f_att = (Forza*) malloc(sizeof(Forza)); //forza generata dal joystick
-Forza* f_rep = (Forza*) malloc(sizeof(Forza)); //forza generata dagli ostacoli
-Forza* f_ris = (Forza*) malloc(sizeof(Forza)); //forza risultante
+Forza* f_att; //forza generata dal joystick
+Forza* f_rep; //forza generata dagli ostacoli
+Forza* f_ris; //forza risultante
 
 
 // Variabili globali che puntano ai messaggi ricevuti dal nodo controller
@@ -84,10 +84,14 @@ int main(int argc , char* argv []){
 	ros::Subscriber odometry_sub = n.subscribe("/odom", 1000, callback_odom);	//Subscribe to the chatter topic /odom
 																				//callback_odom() call anytime a new message arrives
 
-	ros::Subscriber command_sub = n.subscribe("/vel_joystick",1,callback_joystick);	//Subscribe to the chatter topic /vel_joystick
-																					//callback_joystick() call anytime a new message arrives
+	ros::Subscriber command_sub = n.subscribe("/vel_joystick", 1, callback_joystick);	//Subscribe to the chatter topic /vel_joystick
+																						//callback_joystick() call anytime a new message arrives
 	 
 	ros::Rate r(1000); //the Rate instance will attempt to keep the loop at 1000hz by accounting for the time used by the work done during the loop	
+
+	f_att = (Forza*) malloc(sizeof(Forza)); //forza generata dal joystick
+	f_rep = (Forza*) malloc(sizeof(Forza)); //forza generata dagli ostacoli
+	f_ris = (Forza*) malloc(sizeof(Forza)); //forza risultante
 
 	float angolo_base_mobile;	//angolo della base mobile rispetto alla mappa
 
@@ -126,7 +130,7 @@ int main(int argc , char* argv []){
 			}
 		}
 
-		printf(BOLDWHITE "Velocità lineare ricevuta dal joystick: %f. Velocità angolare ricevuta dal joystick: %f.\n", vel_joystick.linear.x, vel_joystick.angular.z); //DEBUG
+		printf(BOLDWHITE "Velocità lineare ricevuta in input: %f. Velocità angolare ricevuta in input: %f.\n", vel_joystick.linear.x, vel_joystick.angular.z); //DEBUG
 
 		/* In questa seconda parte vengono calcolate le componenti x e y delle forze repulsive generate dagli ostacoli
 		 * che agiscono sul robot.
@@ -185,7 +189,7 @@ int main(int argc , char* argv []){
 		 * 			      entrare negli spazi più stretti. Utilizzando quindi questo terzo stato intermedio si permette dunque al Robot di navigare
 		 *                con valori non nulli di velocità lineare e, allo stesso tempo, di poter passare anche negli spazi stretti.
 		 * 
-		 * 		3. Il Robot capisce di trovarsi in una trappola e tenta di uscirne.		(DANGER)
+		 * 		3. Il Robot capisce di trovarsi in una trappola e tenta di uscirne.		(TRAP)
 		 * */
 
 		float vel_ang_imp = 0;	//La velocità angolare che viene sommata a quella ricevuta del joystick 
@@ -193,7 +197,10 @@ int main(int argc , char* argv []){
 
 		//Si agisce nel momento in cui la velocità lineare è maggiore di zero
 		if(vel_joystick.linear.x > 0){
-			vel_ang_imp = K_ANG_VEL * fmodf(angolo_giusto - angolo_base_mobile  , M_PI);
+			vel_ang_imp = K_ANG_VEL * fmodf(angolo_giusto - angolo_base_mobile  , M_PI); //fmodf(x, y) calcola il resto in virgola della divisione di x per y.
+																						 //Il valore restituito è x - n y, dove n è il quoziente di x / y, 
+																						 //arrotondato al primo intero verso zero. Moltiplichiamo questo valore
+																						 //per K_ANG_VEL per redirezionare il robot
 		}
 
 		printf("Velocità imposta:%f.\n\n" RESET, vel_ang_imp); //Log
@@ -299,6 +306,10 @@ int main(int argc , char* argv []){
 	    r.sleep();
 
 	}
+
+	free(f_att);
+	free(f_rep);
+	free(f_ris);
 	
 	return 0;
 }
